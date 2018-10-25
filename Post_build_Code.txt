@@ -1,0 +1,49 @@
+Hi All,
+</br></br>
+$PROJECT_NAME - Build # $BUILD_NUMBER - $BUILD_STATUS:
+</br></br>
+Please find below link for Roku test suite execution status.
+</br>
+<a href="https://charter.stb-tester.com/app/#/results?filter=job:${ENV, var="JOBID"}">https://charter.stb-tester.com/app/#/results?filter=job:${ENV, var="JOBID"}</a>
+</br></br></br>
+<b> Summary of $PROJECT_NAME test execution </b>
+</br></br>
+<style type="text/css">
+.tg  {border-collapse:collapse;border-spacing:0;border-color:#aabcfe;}
+.tg td{font-family:Arial, sans-serif;font-size:14px;padding:8px 16px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#aabcfe;color:#669;background-color:#e8edff;}
+.tg th{font-family:Arial, sans-serif;font-size:14px;font-weight:normal;padding:8px 16px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:#aabcfe;color:#039;background-color:#b9c9fe;}
+.tg .tg-88nc{font-weight:bold;border-color:inherit;text-align:center}
+.tg .tg-c3ow{border-color:inherit;text-align:center;vertical-align:top}
+.tg .tg-uys7{border-color:inherit;text-align:center}
+.tg .tg-xldj{border-color:inherit;text-align:left}
+.tg .tg-0pky{border-color:inherit;text-align:left;vertical-align:top}
+.tg .tg-7btt{font-weight:bold;border-color:inherit;text-align:center;vertical-align:top}
+.tg .tg-fymr{font-weight:bold;border-color:inherit;text-align:left;vertical-align:top}
+</style>
+<table class="tg">
+  <tr>
+    <th class="tg-88nc" colspan="2">Summary Report</th>
+  </tr>
+  <tr>
+    <td class="tg-uys7">No. of Pass</td>
+    <td class="tg-xldj">${ENV, var="PASS"}</td>
+  </tr>
+  <tr>
+    <td class="tg-uys7">No. of Fail</td>
+    <td class="tg-xldj">${ENV, var="FAIL"}</td>
+  </tr>
+  <tr>
+    <td class="tg-c3ow">No. of script error</td>
+    <td class="tg-0pky">${ENV, var="ERROR"}</td>
+  </tr>
+  <tr>
+    <td class="tg-7btt">Total</td>
+    <td class="tg-fymr">${ENV, var="TOTAL"}</td>
+  </tr>
+</table>
+</br></br>
+NOTE: All the developed scripts are executed.
+</br></br>
+
+Thanks,</br>
+-Jenkins

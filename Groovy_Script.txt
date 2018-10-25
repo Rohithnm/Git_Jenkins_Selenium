@@ -1,0 +1,209 @@
+import jenkins.model.Jenkins
+import hudson.model.*
+
+// Settings global environment variable
+instance = Jenkins.getInstance()
+globalNodeProperties = instance.getGlobalNodeProperties()
+envVarsNodePropertyList = globalNodeProperties.getAll(hudson.slaves.EnvironmentVariablesNodeProperty.class)
+
+envVars = null
+if ( envVarsNodePropertyList == null || envVarsNodePropertyList.size() == 0 ) {
+  newEnvVarsNodeProperty = new hudson.slaves.EnvironmentVariablesNodeProperty();
+  globalNodeProperties.add(newEnvVarsNodeProperty)
+  envVars = newEnvVarsNodeProperty.getEnvVars()
+} else {
+  envVars = envVarsNodePropertyList.get(0).getEnvVars()  
+}
+envVars.put("JOBID", "null")
+envVars.put("PASS", "0")
+envVars.put("FAIL", "0")
+envVars.put("ERROR", "0")
+envVars.put("TOTAL", "0")
+instance.save()
+
+def branch= "PROVIDE_YOUR_BRANCH_NAME"//"roku_jenkins_legacy_dev"
+//def module_to_execute= "Roku"
+def node_id="PROVIDE_STB_TESTER_NODE_ID"//"stb-tester-00044b80f98c"
+
+def thr = Thread.currentThread()
+def build = thr?.executable
+def envVarsMap = build.parent.builds[0].properties.get("envVars")
+def file = new File(envVarsMap.get("WORKSPACE")+"/.git/HEAD")
+def orig_head=file.text
+orig_head = orig_head.split("branch")[0]
+def latest_revision=orig_head.trim()
+
+//Define a reusable get request function
+HttpResponse doGetHttpRequest(String requestUrl, String authHeader){    
+    URL url = new URL(requestUrl);    
+    HttpURLConnection connection = url.openConnection();    
+
+    connection.setRequestMethod("GET"); 
+                connection.setRequestProperty ("Authorization",authHeader)
+
+    //get the request    
+    connection.connect();    
+
+    //parse the response    
+    HttpResponse resp = new HttpResponse(connection);    
+
+    if(resp.isFailure()){    
+        println("\nGET from URL: $requestUrl\n  HTTP Status: $resp.statusCode\n  Message: $resp.message\n  Response Body: $resp.body");    
+    }    
+
+    println("Request (GET):\n  URL: $requestUrl");    
+    println("Response:\n  HTTP Status: $resp.statusCode\n  Message: $resp.message\n  Response Body: $resp.body");    
+
+    return resp;    
+}
+
+/**    
+ * Posts the json content to the given url and ensures a 200 or 201 status on the response.    
+ * If a negative status is returned, an error will be raised and the pipeline will fail.    
+ */    
+HttpResponse doPostHttpRequestWithJson(String json, String requestUrl,String authHeader){    
+    return doHttpRequestWithJson(json, requestUrl, "POST",authHeader);    
+}  
+
+/**    
+ * Post/Put the json content to the given url and ensures a 200 or 201 status on the response.    
+ * If a negative status is returned, an error will be raised and the pipeline will fail.    
+ * verb - PUT or POST    
+ */    
+HttpResponse doHttpRequestWithJson(String json, String requestUrl, String verb,String authHeader){    
+    URL url = new URL(requestUrl);    
+    HttpURLConnection connection = url.openConnection();    
+
+    connection.setRequestMethod(verb);
+    connection.setRequestProperty("Authorization",authHeader)
+    connection.setRequestProperty("Content-Type", "application/json");    
+    connection.doOutput = true;    
+
+    //write the payload to the body of the request    
+    def writer = new OutputStreamWriter(connection.outputStream);    
+    writer.write(json);    
+    writer.flush();    
+    writer.close();    
+
+    //post the request    
+    connection.connect();    
+
+    //parse the response    
+    HttpResponse resp = new HttpResponse(connection);    
+
+    if(resp.isFailure()){    
+        error("\n$verb to URL: $requestUrl\n    JSON: $json\n    HTTP Status: $resp.statusCode\n    Message: $resp.message\n    Response Body: $resp.body");    
+    }    
+
+   println("Request ($verb):\n  URL: $requestUrl\n  JSON: $json");    
+   println("Response:\n  HTTP Status: $resp.statusCode\n  Message: $resp.message\n  Response Body: $resp.body");    
+
+    return resp;    
+}  
+
+
+//Defining a class to parse http response
+class HttpResponse {    
+
+    String body;    
+    String message;    
+    Integer statusCode;    
+    boolean failure = false;    
+
+    public HttpResponse(HttpURLConnection connection){    
+        this.statusCode = connection.responseCode;    
+        this.message = connection.responseMessage;    
+
+        if(statusCode == 200 || statusCode == 201){    
+            this.body = connection.content.text;//this would fail the pipeline if there was a 400    
+        }else{    
+            this.failure = true;    
+            this.body = connection.getErrorStream().text;    
+        }    
+
+        connection = null; //set connection to null for good measure, since we are done with it    
+    }       
+}
+
+//Getting Test Pack
+
+getTestPack_endpoint="https://charter.stb-tester.com/api/v2/test_pack/"+latest_revision+"/test_case_names"
+authHeader="token PROVIDE_YOUR_STB_TESTER_AUTHO_TOKEN"//"token asbbhhsd56r-DvGzrez3fMJZJwop9tF"
+println("******"+getTestPack_endpoint)
+test_pack_resp=(doGetHttpRequest(getTestPack_endpoint,authHeader)).body
+
+// Start Test Pack Response Parsing
+
+module_chk_str="PROVIDE_PATH_TO_YOUR_TEST_SCRIPTS_UNDER_PROJECT"//"tests/Roku/SanitySuite"
+
+test_pack_resp=test_pack_resp.replace("[","")
+test_pack_resp=test_pack_resp.replace("]","")
+
+all_tc_list=test_pack_resp.split(",")
+final_tc_list='['
+for(each_tc in all_tc_list){
+if(!each_tc.contains(module_chk_str)){
+println("Eliminated Test :: "+each_tc)
+}else{
+final_tc_list+=(each_tc+',')
+}
+}
+final_tc_list= final_tc_list.substring(0, final_tc_list.length() - 1);
+json_test_pack_load='{'+
+        '"node_id": "'+node_id+'",'+
+       '"test_pack_revision": "'+latest_revision+'",'+
+       '"test_cases":'+final_tc_list+'],'+
+       '"category":"JENKINS_TESTJOB"'+
+       '}'
+
+// Making the request to trigger the execution 
+endPoint_trigger_run="https://charter.stb-tester.com/api/v2/run_tests"
+def response = doPostHttpRequestWithJson(json_test_pack_load,endPoint_trigger_run,authHeader).body
+response=response.substring(response.indexOf("job_url") + 10, response.indexOf("result_counts"))
+response = response.replace(",","")
+response=response.replace("\"","").trim()
+def job_id = doGetHttpRequest(response,authHeader).body
+job_id = job_id.substring(job_id.indexOf("job_uid") + 10, job_id.indexOf("job_url"))
+job_id  = job_id.replace(",","")
+job_id = job_id.replace("\"","").trim()
+while(doGetHttpRequest(response,authHeader).body.contains("running")) {
+}
+// Settings global environment variable
+instance = Jenkins.getInstance()
+globalNodeProperties = instance.getGlobalNodeProperties()
+envVarsNodePropertyList = globalNodeProperties.getAll(hudson.slaves.EnvironmentVariablesNodeProperty.class)
+
+envVars = null
+if ( envVarsNodePropertyList == null || envVarsNodePropertyList.size() == 0 ) {
+  newEnvVarsNodeProperty = new hudson.slaves.EnvironmentVariablesNodeProperty();
+  globalNodeProperties.add(newEnvVarsNodeProperty)
+  envVars = newEnvVarsNodeProperty.getEnvVars()
+} else {
+  envVars = envVarsNodePropertyList.get(0).getEnvVars()  
+}
+envVars.put("JOBID", job_id)
+def total = doGetHttpRequest(response,authHeader).body
+total = total.substring(total.indexOf("total") + 8, total.indexOf("start_time"))
+total = total.replace(",","")
+total = total.replace("}","")
+total = total.replace("\"","").trim()
+envVars.put("Total", total)
+
+def pass = doGetHttpRequest(response,authHeader).body
+pass = pass.substring(pass.indexOf("pass") + 7, pass.indexOf("total"))
+pass = pass.replace(",","")
+pass =pass.replace("\"","").trim()
+envVars.put("PASS", pass)
+
+def fail = doGetHttpRequest(response,authHeader).body
+fail = fail.substring(fail.indexOf("fail") + 7, fail.indexOf("pass"))
+fail = fail.replace(",","")
+fail =fail.replace("\"","").trim()
+envVars.put("FAIL", fail)
+
+def error = doGetHttpRequest(response,authHeader).body
+error = error.substring(error.indexOf("error") + 8, error.indexOf("fail"))
+error = error.replace(",","")
+error = error.replace("\"","").trim()
+envVars.put("ERROR", error)
+instance.save()
